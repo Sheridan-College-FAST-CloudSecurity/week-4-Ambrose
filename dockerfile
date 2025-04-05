@@ -1,62 +1,21 @@
-pipeline {
-    agent any
+# Use the official Python 3.12 image from the Docker Hub
+FROM python:3.12-slim
 
-    environment {
-        AWS_REGION = 'us-east-1'
-        ECR_URI = '956688630813.dkr.ecr.us-east-1.amazonaws.com/assign2/dockerimage/my-service'
-    }
+# Set the working directory
+WORKDIR /app
 
-    stages {
-        stage('Clone Repository') {
-            steps {
-                git(
-                    url: 'https://github.com/Sheridan-College-FAST-CloudSecurity/week-4-Ambrose.git',
-                    branch: 'main',
-                    credentialsId: 'github-ASIA55PYWAQOTDA3DUCD'
-                )
-            }
-        }
+# Copy the requirements file into the container
+COPY requirements.txt .
 
-        stage('Set Image Tag') {
-            steps {
-                script {
-                    env.IMAGE_TAG = "${env.BUILD_NUMBER ?: 'latest'}"
-                }
-            }
-        }
+# Install the dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install pytest
 
-        stage('Build Docker Image') {
-            steps {
-                sh 'docker build -t my-service:${IMAGE_TAG} .'
-            }
-        }
+# Copy the rest of the application code into the container
+COPY *.py .
 
-        stage('Authenticate to Amazon ECR') {
-            steps {
-                withCredentials([
-                    string(credentialsId: 'aws-access-key-id', variable: 'AWS_ACCESS_KEY_ID'),
-                    string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY'),
-                    string(credentialsId: 'aws-session-token', variable: 'AWS_SESSION_TOKEN')
-                ]) {
-                    sh """
-                        export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
-                        export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
-                        export AWS_SESSION_TOKEN=$AWS_SESSION_TOKEN
+# Expose the port the app runs on
+EXPOSE 5000
 
-                        aws ecr get-login-password --region ${AWS_REGION} | \
-                        docker login --username AWS --password-stdin 956688630813.dkr.ecr.us-east-1.amazonaws.com
-                    """
-                }
-            }
-        }
-
-        stage('Push Docker Image to ECR') {
-            steps {
-                sh """
-                    docker tag my-service:${IMAGE_TAG} ${ECR_URI}:${IMAGE_TAG}
-                    docker push ${ECR_URI}:${IMAGE_TAG}
-                """
-            }
-        }
-    }
-}
+# Command to run the application, making port 5000 externally accessible
+CMD ["flask", "run", "--host=0.0.0.0", "--port=5000"]
